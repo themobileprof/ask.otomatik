@@ -2,22 +2,15 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
 
-const db = new sqlite3.Database(':memory:', (err) => {
+// Use existing bookings.db in backend directory
+const dbPath = path.join(__dirname, '..', 'bookings.db');
+
+const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Error opening database:', err);
     return;
   }
-  console.log('Connected to SQLite database');
-  
-  // Read and execute schema
-  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-  db.exec(schema, (err) => {
-    if (err) {
-      console.error('Error initializing database schema:', err);
-      return;
-    }
-    console.log('Database schema initialized');
-  });
+  console.log('Connected to SQLite database at:', dbPath);
 });
 
 // Create bookings table if it doesn't exist
@@ -37,7 +30,6 @@ CREATE TABLE IF NOT EXISTS bookings (
 db.run(createBookingsTableSql);
 
 // Create users table if it doesn't exist
-// Add role to users table (default: 'user')
 const createUsersTableSql = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +41,7 @@ CREATE TABLE IF NOT EXISTS users (
 )`;
 db.run(createUsersTableSql);
 
-// Create settings table for workdays, hours, and buffer if it doesn't exist
+// Create settings table if it doesn't exist
 const createSettingsTableSql = `
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,19 +54,24 @@ db.run(createSettingsTableSql);
 
 // Helper to get workdays/hours/buffer from DB
 function getWorkSettings(callback) {
-  db.get('SELECT workDays, workStart, workEnd, bufferMinutes FROM settings ORDER BY id DESC LIMIT 1', (err, row) => {
+  db.get('SELECT * FROM settings ORDER BY id DESC LIMIT 1', [], (err, row) => {
     if (err || !row) {
-      // fallback to defaults
-      return callback(null, { workDays: [1,2,3,4,5], workStart: 9, workEnd: 17, bufferMinutes: 60 });
+      // Return default settings if no settings found
+      callback(null, {
+        workDays: [1, 2, 3, 4, 5], // Monday to Friday
+        workStart: 9, // 9 AM
+        workEnd: 17, // 5 PM
+        bufferMinutes: 60 // 1 hour buffer between sessions
+      });
+    } else {
+      callback(null, {
+        workDays: row.workDays.split(',').map(Number),
+        workStart: row.workStart,
+        workEnd: row.workEnd,
+        bufferMinutes: row.bufferMinutes
+      });
     }
-    callback(null, {
-      workDays: row.workDays.split(',').map(Number),
-      workStart: row.workStart,
-      workEnd: row.workEnd,
-      bufferMinutes: row.bufferMinutes || 60
-    });
   });
 }
 
-module.exports = db;
-module.exports.getWorkSettings = getWorkSettings;
+module.exports = { db, getWorkSettings };

@@ -1,7 +1,7 @@
 const express = require('express');
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
-const db = require('../db/db');
+const { db } = require('../db/db');
 
 const router = express.Router();
 
@@ -63,14 +63,23 @@ router.post('/google', async (req, res) => {
     });
     const payload = ticket.getPayload();
 
+    // Define admin emails
+    const adminEmails = ['themobileprof@gmail.com', 'themobileprof.com@gmail.com'];
+    const isAdmin = adminEmails.includes(payload.email);
+
     // Store or update user
     const user = await new Promise((resolve, reject) => {
       const createdAt = new Date().toISOString();
+      // Include role in INSERT
       db.run(
-        'INSERT OR IGNORE INTO users (email, name, picture, createdAt) VALUES (?, ?, ?, ?)',
-        [payload.email, payload.name, payload.picture, createdAt],
+        'INSERT OR IGNORE INTO users (email, name, picture, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+        [payload.email, payload.name, payload.picture, isAdmin ? 'admin' : 'user', createdAt],
         function(err) {
           if (err) reject(err);
+          // If user already exists, update their role if they're an admin
+          if (isAdmin) {
+            db.run('UPDATE users SET role = ? WHERE email = ?', ['admin', payload.email]);
+          }
           db.get('SELECT * FROM users WHERE email = ?', [payload.email], (err, user) => {
             if (err) reject(err);
             else resolve(user);

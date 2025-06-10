@@ -24,6 +24,10 @@ const Navigation = () => {
     { href: '/#faq', label: 'FAQ' },
   ];
 
+  const handleDashboardClick = () => {
+    navigate(user?.role === 'admin' ? '/admin' : '/dashboard');
+  };
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
       <div className="container mx-auto px-6">
@@ -52,10 +56,10 @@ const Navigation = () => {
             {user && (
               <Button
                 variant="outline"
-                onClick={() => navigate('/dashboard')}
+                onClick={handleDashboardClick}
                 className="hidden md:flex items-center gap-2"
               >
-                Dashboard
+                {user.role === 'admin' ? 'Admin Panel' : 'Dashboard'}
               </Button>
             )}
             <UserMenu />
@@ -92,12 +96,12 @@ const Navigation = () => {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    navigate('/dashboard');
+                    handleDashboardClick();
                     setIsMobileMenuOpen(false);
                   }}
                   className="flex items-center gap-2 w-full justify-center"
                 >
-                  Dashboard
+                  {user.role === 'admin' ? 'Admin Panel' : 'Dashboard'}
                 </Button>
               )}
             </div>

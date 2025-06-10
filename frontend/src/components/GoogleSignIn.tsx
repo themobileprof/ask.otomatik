@@ -26,6 +26,7 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ className }) => {
   const { toast } = useToast();
   const buttonRef = useRef<HTMLDivElement>(null);
   const scriptRef = useRef<HTMLScriptElement | null>(null);
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -56,12 +57,12 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ className }) => {
     };
 
     const initializeGoogleSignIn = () => {
-      if (!window.google?.accounts?.id) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Google Sign In failed to load properly.",
-        });
+      if (!window.google?.accounts?.id || !buttonRef.current) {
+        return;
+      }
+
+      // Prevent double initialization
+      if (isInitializedRef.current) {
         return;
       }
 
@@ -71,18 +72,20 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ className }) => {
           callback: handleCredentialResponse,
         });
 
-        if (buttonRef.current) {
-          window.google.accounts.id.renderButton(buttonRef.current, {
-            theme: 'outline',
-            size: 'large',
-            type: 'standard',
-            text: 'signin_with',
-            shape: 'rectangular',
-            width: buttonRef.current.offsetWidth || 200,
-            logo_alignment: 'center',
-          });
-        }
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          theme: 'outline',
+          size: 'large',
+          type: 'standard',
+          text: 'signin_with',
+          shape: 'rectangular',
+          width: buttonRef.current.offsetWidth || 200,
+          logo_alignment: 'center',
+        });
+
+        isInitializedRef.current = true;
       } catch (error) {
+        console.error('Failed to initialize Google Sign In:', error);
+        isInitializedRef.current = false;
         toast({
           variant: "destructive",
           title: "Error",
@@ -91,40 +94,45 @@ const GoogleSignIn: React.FC<GoogleSignInProps> = ({ className }) => {
       }
     };
 
-    // Clean up any existing instances
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.cancel();
-    }
-
-    // Remove any existing script
+    // Only load the script if it's not already present and working
     const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-    if (existingScript) {
-      existingScript.remove();
+    if (!existingScript || !window.google?.accounts?.id) {
+      if (existingScript) {
+        existingScript.remove();
+        isInitializedRef.current = false;
+      }
+
+      const script = document.createElement('script');
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = initializeGoogleSignIn;
+      script.onerror = () => {
+        isInitializedRef.current = false;
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load Google Sign In script.",
+        });
+      };
+
+      scriptRef.current = script;
+      document.body.appendChild(script);
+    } else {
+      // If script exists and is working, just initialize
+      initializeGoogleSignIn();
     }
-
-    // Create and load new script
-    const script = document.createElement('script');
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGoogleSignIn;
-    script.onerror = () => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load Google Sign In script.",
-      });
-    };
-
-    scriptRef.current = script;
-    document.body.appendChild(script);
 
     return () => {
-      if (scriptRef.current && document.body.contains(scriptRef.current)) {
-        document.body.removeChild(scriptRef.current);
-      }
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.cancel();
+      // Only clean up if component is actually being unmounted
+      if (!buttonRef.current) {
+        if (scriptRef.current && document.body.contains(scriptRef.current)) {
+          document.body.removeChild(scriptRef.current);
+        }
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.cancel();
+        }
+        isInitializedRef.current = false;
       }
     };
   }, [signIn, toast]);

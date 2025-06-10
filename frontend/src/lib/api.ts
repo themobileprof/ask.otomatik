@@ -20,8 +20,8 @@ export interface User {
   id: number;
   email: string;
   name: string;
-  picture?: string;
-  role: 'user' | 'admin';
+  picture: string;
+  role: string;
 }
 
 export interface TimeSlot {
@@ -30,16 +30,68 @@ export interface TimeSlot {
 }
 
 export interface AvailabilityResponse {
-  unavailable: Record<string, TimeSlot[]>;
+  unavailable: Record<string, { from: number; to: number }[]>;
   workDays: number[];
   workStart: number;
   workEnd: number;
   bufferMinutes: number;
 }
 
-interface AuthResponse {
+export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface PaymentResponse {
+  data: {
+    link: string;
+  };
+}
+
+export interface ApiError extends Error {
+  status?: number;
+  response?: {
+    data?: {
+      error?: string;
+    };
+  };
+}
+
+export interface BookingResponse {
+  message: string;
+  booking: Booking;
+  warning?: string;
+}
+
+interface Wallet {
+  id: number;
+  user_id: number;
+  balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface WalletTransaction {
+  id: number;
+  amount: number;
+  type: 'credit' | 'debit';
+  description: string;
+  performed_by_name: string;
+  created_at: string;
+}
+
+interface WalletResponse {
+  wallet: Wallet;
+  transactions: WalletTransaction[];
+}
+
+interface PaymentInitiateResponse {
+  payment_type?: 'wallet';
+  wallet_balance?: number;
+  amount?: number;
+  data?: {
+    link: string;
+  };
 }
 
 // API Client
@@ -48,6 +100,9 @@ class ApiClient {
   private token: string | null = null;
 
   constructor() {
+    // Initialize token from localStorage if it exists
+    this.token = localStorage.getItem('auth_token');
+
     this.client = axios.create({
       baseURL: BASE_URL,
       headers: {
@@ -57,11 +112,44 @@ class ApiClient {
 
     // Add request interceptor to add token
     this.client.interceptors.request.use((config) => {
-      if (this.token) {
-        config.headers.Authorization = `Bearer ${this.token}`;
+      // Always check both memory and localStorage for token
+      const currentToken = this.getToken();
+      if (currentToken) {
+        config.headers.Authorization = `Bearer ${currentToken}`;
       }
       return config;
     });
+
+    // Add response interceptor to handle auth errors
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Clear token on auth errors
+          this.setToken(null);
+          // Redirect to home page if not already there
+          if (window.location.pathname !== '/') {
+            window.location.href = '/';
+          }
+        }
+
+        // Log the full error for debugging
+        console.error('API Error:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          error: error.response?.data?.error,
+          originalError: error.message
+        });
+
+        // Transform error to include more details
+        const apiError = new Error(
+          error.response?.data?.error || error.message
+        ) as ApiError;
+        apiError.status = error.response?.status;
+        apiError.response = error.response;
+        return Promise.reject(apiError);
+      }
+    );
   }
 
   setToken(token: string | null) {
@@ -93,6 +181,10 @@ class ApiClient {
     return this.client.delete<T>(url, config);
   }
 
+  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig) {
+    return this.client.patch<T>(url, data, config);
+  }
+
   // Auth Endpoints
   async checkSession() {
     const token = this.getToken();
@@ -111,9 +203,19 @@ class ApiClient {
   }
 
   // Booking Endpoints
-  async createBooking(data: any) {
-    const response = await this.post('/api/bookings', data);
-    return response.data;
+  async createBooking(data: any): Promise<BookingResponse> {
+    try {
+      const response = await this.post<BookingResponse>('/api/bookings', data);
+      return response.data;
+    } catch (error) {
+      if (error instanceof Error) {
+        const apiError = error as ApiError;
+        if (apiError.status === 403 && apiError.response?.data?.error) {
+          throw new Error(apiError.response.data.error);
+        }
+      }
+      throw error;
+    }
   }
 
   async getBookings() {
@@ -121,14 +223,19 @@ class ApiClient {
     return response.data;
   }
 
-  async getAvailability() {
-    const response = await this.get('/api/bookings/availability');
+  async getAvailability(): Promise<AvailabilityResponse> {
+    const response = await this.get<AvailabilityResponse>('/api/bookings/availability');
+    return response.data;
+  }
+
+  async markBookingAsPaid(bookingId: number) {
+    const response = await this.patch(`/api/bookings/${bookingId}/mark-paid`);
     return response.data;
   }
 
   // Payment Endpoints
   async initiatePayment(data: any) {
-    const response = await this.post('/api/payment/flutterwave/initiate', data);
+    const response = await this.post<PaymentResponse>('/api/payment/flutterwave/initiate', data);
     return response.data;
   }
 
@@ -146,8 +253,8 @@ class ApiClient {
     return response.data;
   }
 
-  async updateUserRole(userId: number, role: 'user' | 'admin') {
-    const response = await this.put('/api/admin/users/' + userId + '/role', { role });
+  async updateUserRole(userId: number, role: string) {
+    const response = await this.patch(`/api/admin/users/${userId}/role`, { role });
     return response.data;
   }
 
@@ -156,18 +263,51 @@ class ApiClient {
     return response.data;
   }
 
-  async updateSettings(data: {
-    workDays: number[];
-    workStart: number;
-    workEnd: number;
-    bufferMinutes: number;
-  }) {
-    const response = await this.put('/api/admin/settings', data);
+  async updateSettings(data: any) {
+    const response = await this.patch('/api/admin/settings', data);
     return response.data;
   }
 
   async getStats() {
     const response = await this.get('/api/admin/stats');
+    return response.data;
+  }
+
+  // Wallet endpoints
+  async getWallet() {
+    const response = await this.get<WalletResponse>('/api/wallet');
+    return response.data;
+  }
+
+  async topUpWallet(amount: number) {
+    const response = await this.post<{ wallet: Wallet }>('/api/wallet/topup', { amount });
+    return response.data;
+  }
+
+  async debitWallet(amount: number, description: string) {
+    const response = await this.post<{ wallet: Wallet }>('/api/wallet/debit', { amount, description });
+    return response.data;
+  }
+
+  // Payment endpoints
+  async initiatePaymentWallet(data: {
+    amount: number;
+    email: string;
+    name: string;
+    tx_ref: string;
+    redirect_url: string;
+    use_wallet?: boolean;
+  }) {
+    const response = await this.post<PaymentInitiateResponse>('/api/payment/flutterwave/initiate', data);
+    return response.data;
+  }
+
+  async verifyPaymentWallet(data: {
+    transaction_id?: string;
+    booking_data: any;
+    payment_type?: 'wallet' | 'flutterwave';
+  }) {
+    const response = await this.post('/api/payment/flutterwave/verify', data);
     return response.data;
   }
 }

@@ -3,10 +3,16 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+// Add environment variable verification logging
+console.log('Environment Check:');
+console.log('- FLW_SECRET_KEY:', process.env.FLW_SECRET_KEY ? 'Present (starts with: ' + process.env.FLW_SECRET_KEY.substring(0, 8) + '...)' : 'Missing');
+console.log('- NODE_ENV:', process.env.NODE_ENV || 'development');
+
 const bookingsRouter = require('./routes/bookings');
 const authRouter = require('./routes/auth');
 const paymentRouter = require('./routes/payment');
 const adminRouter = require('./routes/admin');
+const walletRouter = require('./routes/wallet');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -38,6 +44,7 @@ app.use('/auth', authRouter); // Remove /api prefix for auth routes
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/payment', paymentRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/wallet', walletRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

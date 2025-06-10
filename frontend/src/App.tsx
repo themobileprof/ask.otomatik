@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { WalletProvider } from '@/contexts/WalletContext';
 import { Toaster } from '@/components/ui/toaster';
 import Index from '@/pages/Index';
 import PaymentComplete from '@/pages/PaymentComplete';
@@ -13,22 +14,24 @@ import AccessDenied from '@/pages/AccessDenied';
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/dashboard" element={<UserDashboard />} />
-          <Route path="/payment-complete" element={<PaymentComplete />} />
-          <Route path="/access-denied" element={<AccessDenied />} />
-          
-          {/* Admin Routes */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="users" element={<Users />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Routes>
-        <Toaster />
-      </Router>
+      <WalletProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/payment-complete" element={<PaymentComplete />} />
+            <Route path="/access-denied" element={<AccessDenied />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="users" element={<Users />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+          </Routes>
+          <Toaster />
+        </Router>
+      </WalletProvider>
     </AuthProvider>
   );
 }

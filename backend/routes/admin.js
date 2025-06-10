@@ -1,6 +1,5 @@
 const express = require('express');
-const db = require('../db/db');
-const { getWorkSettings } = require('../db/db');
+const { db, getWorkSettings } = require('../db/db');
 const { authenticateJWT } = require('./auth-middleware');
 
 const router = express.Router();
@@ -20,7 +19,15 @@ router.use(authenticateJWT);
 router.get('/users', requireAdmin, (req, res) => {
   db.all('SELECT id, email, name, picture, role, createdAt FROM users', [], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
+    res.json({ data: rows });
+  });
+});
+
+// GET /api/admin/wallets - List all wallets
+router.get('/wallets', requireAdmin, (req, res) => {
+  db.all('SELECT * FROM wallets', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ data: rows });
   });
 });
 

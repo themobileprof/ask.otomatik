@@ -8,11 +8,18 @@ import { Calendar } from '@/components/ui/calendar';
 import { Clock, Calendar as CalendarIcon, Gift, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { api } from '@/lib/api';
+import { api, ApiError, AvailabilityResponse } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const BOOKING_DATA_KEY = 'pending_booking_data';
 
@@ -26,13 +33,7 @@ const Booking = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [bookingType, setBookingType] = useState<'free' | 'paid'>('free');
   const [isLoading, setIsLoading] = useState(false);
-  const [availability, setAvailability] = useState<{
-    unavailable: Record<string, { from: number; to: number }[]>;
-    workDays: number[];
-    workStart: number;
-    workEnd: number;
-    bufferMinutes: number;
-  }>();
+  const [availability, setAvailability] = useState<AvailabilityResponse>();
 
   useEffect(() => {
     loadAvailability();
@@ -43,9 +44,15 @@ const Booking = () => {
       const data = await api.getAvailability();
       setAvailability(data);
     } catch (error) {
+      const apiError = error as ApiError;
+      console.error('Failed to load availability:', {
+        status: apiError.status,
+        error: apiError.response?.data?.error,
+        message: apiError.message
+      });
       toast({
         title: 'Error',
-        description: 'Failed to load availability. Please try again.',
+        description: apiError.response?.data?.error || apiError.message || 'Failed to load availability',
         variant: 'destructive',
       });
     }
@@ -171,11 +178,37 @@ const Booking = () => {
       };
 
       if (bookingType === 'free') {
-        await api.createBooking(bookingData);
-        toast({
-          title: 'Success',
-          description: 'Your free consultation has been booked!',
-        });
+        try {
+          const response = await api.createBooking(bookingData);
+          toast({
+            title: 'Success',
+            description: response.message,
+          });
+          if (response.warning) {
+            toast({
+              title: 'Note',
+              description: response.warning,
+              variant: 'default',
+            });
+          }
+          setIsDialogOpen(false);
+          setSelectedDate(undefined);
+          setSelectedTime('');
+          setSelectedEndTime('');
+        } catch (error) {
+          const apiError = error as ApiError;
+          console.error('Failed to book free session:', {
+            status: apiError.status,
+            error: apiError.response?.data?.error,
+            originalError: apiError.message,
+            bookingData
+          });
+          toast({
+            title: 'Booking Failed',
+            description: apiError.response?.data?.error || apiError.message || 'Unable to book session',
+            variant: 'destructive',
+          });
+        }
       } else {
         const cost = calculateCost().replace('$', '');
         const tx_ref = uuidv4();
@@ -186,28 +219,45 @@ const Booking = () => {
           tx_ref,
         }));
 
-        const paymentResponse = await api.initiatePayment({
-          amount: cost,
-          email: user.email,
-          name: user.name,
-          tx_ref,
-          redirect_url: `${window.location.origin}/payment-complete`,
-          booking_data: bookingData,
-        });
+        try {
+          const paymentResponse = await api.initiatePayment({
+            amount: cost,
+            email: user.email,
+            name: user.name,
+            tx_ref,
+            redirect_url: `${window.location.origin}/payment-complete`,
+            booking_data: bookingData,
+          });
 
-        // Redirect to Flutterwave checkout
-        window.location.href = paymentResponse.data.link;
-        return;
+          // Redirect to Flutterwave checkout
+          window.location.href = paymentResponse.data.link;
+          return;
+        } catch (error) {
+          const apiError = error as ApiError;
+          console.error('Failed to initiate payment:', {
+            status: apiError.status,
+            error: apiError.response?.data?.error,
+            originalError: apiError.message,
+            bookingData,
+            cost
+          });
+          toast({
+            title: 'Payment Failed',
+            description: apiError.response?.data?.error || apiError.message || 'Unable to process payment',
+            variant: 'destructive',
+          });
+        }
       }
-
-      setIsDialogOpen(false);
-      setSelectedDate(undefined);
-      setSelectedTime('');
-      setSelectedEndTime('');
     } catch (error) {
+      const apiError = error as ApiError;
+      console.error('Booking process failed:', {
+        status: apiError.status,
+        error: apiError.response?.data?.error,
+        originalError: apiError.message
+      });
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to book session',
+        description: apiError.response?.data?.error || apiError.message || 'Unable to process request',
         variant: 'destructive',
       });
     } finally {
@@ -324,7 +374,7 @@ const Booking = () => {
                           Book Free Session
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-4xl">
+                      <DialogContent className="sm:max-w-4xl overflow-y-auto max-h-[90vh]">
                         <DialogHeader>
                           <DialogTitle className="text-center text-xl font-bold">
                             Schedule Your Free Consultation
@@ -347,26 +397,29 @@ const Booking = () => {
                           </div>
                           <div>
                             <h3 className="text-lg font-semibold mb-3">Select Time (30 min slots)</h3>
-                            <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
-                              {freeTimeSlots.map((time) => (
-                                <Button
-                                  key={time}
-                                  variant={selectedTime === time ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => handleTimeSelect(time)}
-                                  disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                >
-                                  {time}
-                                </Button>
-                              ))}
-                            </div>
+                            <Select value={selectedTime} onValueChange={handleTimeSelect}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select a time" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {freeTimeSlots.map((time) => (
+                                  <SelectItem
+                                    key={time}
+                                    value={time}
+                                    disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                  >
+                                    {time}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
-                        <div className="mt-6 flex justify-end">
+                        <div className="mt-6 sticky bottom-0 bg-white p-4 border-t">
                           <Button
                             onClick={handleConfirmBooking}
                             disabled={!isBookingValid() || isLoading}
-                            className="w-full md:w-auto"
+                            className="w-full"
                           >
                             {isLoading ? (
                               <>
@@ -423,7 +476,7 @@ const Booking = () => {
                           Book Paid Session
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-4xl">
+                      <DialogContent className="sm:max-w-4xl overflow-y-auto max-h-[90vh]">
                         <DialogHeader>
                           <DialogTitle className="text-center text-xl font-bold">
                             Schedule Your Paid Consultation
@@ -447,36 +500,42 @@ const Booking = () => {
                           <div className="space-y-6">
                             <div>
                               <h3 className="text-lg font-semibold mb-3">Select Start Time</h3>
-                              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                                {paidTimeSlots.map((time) => (
-                                  <Button
-                                    key={time}
-                                    variant={selectedTime === time ? "default" : "outline"}
-                                    size="sm"
-                                    onClick={() => handleTimeSelect(time)}
-                                    disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                  >
-                                    {time}
-                                  </Button>
-                                ))}
-                              </div>
+                              <Select value={selectedTime} onValueChange={handleTimeSelect}>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select start time" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {paidTimeSlots.map((time) => (
+                                    <SelectItem
+                                      key={time}
+                                      value={time}
+                                      disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                    >
+                                      {time}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                             {selectedTime && (
                               <div>
                                 <h3 className="text-lg font-semibold mb-3">Select End Time</h3>
-                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                                  {getAvailableEndTimes().map((time) => (
-                                    <Button
-                                      key={time}
-                                      variant={selectedEndTime === time ? "default" : "outline"}
-                                      size="sm"
-                                      onClick={() => handleEndTimeSelect(time)}
-                                      disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                    >
-                                      {time}
-                                    </Button>
-                                  ))}
-                                </div>
+                                <Select value={selectedEndTime} onValueChange={handleEndTimeSelect}>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select end time" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {getAvailableEndTimes().map((time) => (
+                                      <SelectItem
+                                        key={time}
+                                        value={time}
+                                        disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                      >
+                                        {time}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                             )}
                           </div>
@@ -489,11 +548,11 @@ const Booking = () => {
                             </div>
                           </div>
                         )}
-                        <div className="mt-6 flex justify-end">
+                        <div className="mt-6 sticky bottom-0 bg-white p-4 border-t">
                           <Button
                             onClick={handleConfirmBooking}
                             disabled={!isBookingValid() || isLoading}
-                            className="w-full md:w-auto"
+                            className="w-full"
                           >
                             {isLoading ? (
                               <>
