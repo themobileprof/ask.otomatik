@@ -46,6 +46,7 @@ const SubscriptionCalendar = () => {
   const [availability, setAvailability] = useState<AvailabilityData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
+  const [loadingTimeoutId, setLoadingTimeoutId] = useState<NodeJS.Timeout | null>(null);
 
   // Available time slots for paid sessions (hourly slots)
   const timeSlots = [
@@ -54,7 +55,18 @@ const SubscriptionCalendar = () => {
   ];
 
   useEffect(() => {
-    loadAvailability();
+    // Add a small delay before loading to avoid rapid successive calls
+    const timeoutId = setTimeout(() => {
+      loadAvailability();
+    }, 500);
+    
+    setLoadingTimeoutId(timeoutId);
+
+    return () => {
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+      }
+    };
   }, []);
 
   const loadAvailability = async () => {

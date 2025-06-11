@@ -45,9 +45,21 @@ const BookingsList = () => {
   const [cancelConfirmText, setCancelConfirmText] = useState('');
   const { toast } = useToast();
   const { fetchWallet } = useWallet();
+  const [loadingTimeoutId, setLoadingTimeoutId] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    loadBookings();
+    // Add a small delay before loading to avoid rapid successive calls
+    const timeoutId = setTimeout(() => {
+      loadBookings();
+    }, 500);
+    
+    setLoadingTimeoutId(timeoutId);
+
+    return () => {
+      if (loadingTimeoutId) {
+        clearTimeout(loadingTimeoutId);
+      }
+    };
   }, []);
 
   const loadBookings = async () => {

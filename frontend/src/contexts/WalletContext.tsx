@@ -93,9 +93,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
     if (isAuthenticated) {
-      fetchWallet();
+      // Add a small delay to avoid rapid successive calls
+      timeoutId = setTimeout(() => {
+        fetchWallet();
+      }, 500);
+    } else {
+      setWallet(null);
+      setTransactions([]);
+      setIsLoading(false);
     }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [isAuthenticated]);
 
   return (
