@@ -75,14 +75,16 @@ router.get('/stats', requireAdmin, (req, res) => {
       SELECT b.*, u.name as userName, u.picture as userPicture 
       FROM bookings b 
       LEFT JOIN users u ON b.email = u.email 
-      ORDER BY b.createdAt DESC LIMIT 5
+      ORDER BY b.date DESC, b.time DESC 
+      LIMIT 5
     `,
     upcomingBookings: `
       SELECT b.*, u.name as userName, u.picture as userPicture 
       FROM bookings b 
       LEFT JOIN users u ON b.email = u.email 
       WHERE date >= date('now') 
-      ORDER BY date ASC, time ASC LIMIT 5
+      ORDER BY b.date ASC, b.time ASC 
+      LIMIT 5
     `,
     bookingsByType: 'SELECT type, COUNT(*) as count FROM bookings GROUP BY type',
     totalUsers: 'SELECT COUNT(*) as count FROM users'
