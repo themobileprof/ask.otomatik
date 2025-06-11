@@ -15,22 +15,22 @@ function App() {
   return (
     <AuthProvider>
       <WalletProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/dashboard" element={<UserDashboard />} />
-            <Route path="/payment-complete" element={<PaymentComplete />} />
+      <Router>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/dashboard" element={<UserDashboard />} />
+          <Route path="/payment-complete" element={<PaymentComplete />} />
             <Route path="/access-denied" element={<AccessDenied />} />
-            
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="users" element={<Users />} />
-              <Route path="settings" element={<Settings />} />
-            </Route>
-          </Routes>
-          <Toaster />
-        </Router>
+          
+          {/* Admin Routes */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="users" element={<Users />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+        <Toaster />
+      </Router>
       </WalletProvider>
     </AuthProvider>
   );

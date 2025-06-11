@@ -1,36 +1,15 @@
-import React from 'react';
-import { useWallet } from '@/contexts/WalletContext';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Wallet } from 'lucide-react';
+import { useWallet } from '@/contexts/WalletContext';
 
-const WalletCard: React.FC = () => {
+const WalletCard = () => {
   const { wallet, transactions, isLoading } = useWallet();
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="pt-6 flex justify-center items-center min-h-[200px]">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </CardContent>
-      </Card>
-    );
-  }
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   if (!wallet) {
     return (
@@ -43,63 +22,67 @@ const WalletCard: React.FC = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Wallet</CardTitle>
-        <CardDescription>Your wallet balance and recent transactions</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-6">
-          <div className="text-2xl font-bold">
-            ${wallet.balance.toFixed(2)}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5" />
+            Wallet Balance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col space-y-4">
+            <div className="text-3xl font-bold">${wallet.balance.toFixed(2)}</div>
+            <Button onClick={() => setIsHistoryOpen(true)}>
+              View Transaction History
+            </Button>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Current Balance
-          </p>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Recent Transactions</h3>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>By</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell>
-                    {format(new Date(transaction.created_at), 'MMM d, yyyy')}
-                  </TableCell>
-                  <TableCell>{transaction.description}</TableCell>
-                  <TableCell>${transaction.amount.toFixed(2)}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={transaction.type === 'credit' ? 'default' : 'secondary'}
-                    >
-                      {transaction.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{transaction.performed_by_name}</TableCell>
-                </TableRow>
-              ))}
-              {transactions.length === 0 && (
+      <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transaction History</DialogTitle>
+          </DialogHeader>
+          {isLoading ? (
+            <div className="flex justify-center p-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No transactions yet
-                  </TableCell>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Description</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((transaction) => (
+                  <TableRow key={transaction.id}>
+                    <TableCell>
+                      {format(new Date(transaction.created_at), 'MMM d, yyyy')}
+                    </TableCell>
+                    <TableCell className="capitalize">{transaction.type}</TableCell>
+                    <TableCell>${transaction.amount.toFixed(2)}</TableCell>
+                    <TableCell>{transaction.description}</TableCell>
+                  </TableRow>
+                ))}
+                {transactions.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4">
+                      No transactions found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 
-// Helper to add event to Google Calendar
-async function addBookingToGoogleCalendar(booking) {
+// Helper to get Google Calendar client
+const getCalendarClient = async () => {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET
@@ -15,14 +15,22 @@ async function addBookingToGoogleCalendar(booking) {
       await oauth2Client.getAccessToken();
     } catch (err) {
       console.error('Failed to refresh Google access token:', err.message);
-      return;
+      return null;
     }
   } else if (process.env.GOOGLE_ACCESS_TOKEN) {
     oauth2Client.setCredentials({ access_token: process.env.GOOGLE_ACCESS_TOKEN });
   } else {
     console.warn('Google Calendar sync skipped: missing credentials');
-    return;
+    return null;
   }
+
+  return google.calendar({ version: 'v3', auth: oauth2Client });
+};
+
+// Helper to add event to Google Calendar
+async function addBookingToGoogleCalendar(booking) {
+  const calendar = await getCalendarClient();
+  if (!calendar) return null;
 
   // Calculate end time for the event
   let endTime = booking.endTime;
@@ -52,7 +60,6 @@ async function addBookingToGoogleCalendar(booking) {
     endTime = `${endHour}:${endMinute.toString().padStart(2, '0')} ${endPeriod}`;
   }
 
-  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
   const event = {
     summary: `Consulting Session: ${booking.email}`,
     description: `Type: ${booking.type}, Cost: ${booking.cost}`,
@@ -79,17 +86,42 @@ async function addBookingToGoogleCalendar(booking) {
       conferenceDataVersion: 1,
       sendUpdates: 'all', // send notifications to attendees
     });
+
     const meetLink = response.data.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri;
     console.log('Booking added to Google Calendar');
     if (meetLink) {
       console.log('Google Meet link:', meetLink);
-      return meetLink;
+      return {
+        meetLink,
+        eventId: response.data.id
+      };
     }
-    return null;
+    return {
+      eventId: response.data.id
+    };
   } catch (err) {
     console.error('Failed to add booking to Google Calendar:', err.message);
     return null;
   }
 }
 
-module.exports = { addBookingToGoogleCalendar };
+// Helper to delete event from Google Calendar
+async function deleteBookingFromGoogleCalendar(eventId) {
+  const calendar = await getCalendarClient();
+  if (!calendar) return false;
+
+  try {
+    await calendar.events.delete({
+      calendarId: process.env.GOOGLE_CALENDAR_ID,
+      eventId: eventId,
+      sendUpdates: 'all', // send notifications to attendees
+    });
+    console.log('Event deleted from Google Calendar:', eventId);
+    return true;
+  } catch (err) {
+    console.error('Failed to delete event from Google Calendar:', err.message);
+    return false;
+  }
+}
+
+module.exports = { addBookingToGoogleCalendar, deleteBookingFromGoogleCalendar };

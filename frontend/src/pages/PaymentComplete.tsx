@@ -8,6 +8,23 @@ import Layout from '@/components/Layout';
 
 const BOOKING_DATA_KEY = 'pending_booking_data';
 
+interface PaymentVerificationResponse {
+  message: string;
+  booking: {
+    id: number;
+    date: string;
+    time: string;
+    endTime?: string;
+    type: string;
+    cost: string;
+    email: string;
+    createdAt: string;
+    meet_link?: string;
+    paid: boolean;
+  };
+  warning?: string;
+}
+
 const PaymentComplete = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -39,9 +56,9 @@ const PaymentComplete = () => {
           throw new Error('Transaction reference mismatch');
         }
 
-        const response = await api.verifyPayment(transactionId, bookingData);
+        const response = await api.verifyPayment(transactionId, bookingData) as PaymentVerificationResponse;
 
-        if (response.status === 'success') {
+        if (response.message === 'Booking confirmed') {
           setStatus('success');
           toast({
             title: 'Payment Successful',
@@ -53,6 +70,7 @@ const PaymentComplete = () => {
           throw new Error('Payment verification failed');
         }
       } catch (error) {
+        console.error('Payment verification failed:', error);
         setStatus('error');
         toast({
           title: 'Payment Failed',
@@ -65,10 +83,10 @@ const PaymentComplete = () => {
     };
 
     verifyPayment();
-  }, [searchParams, toast]);
+  }, [searchParams, toast, navigate]);
 
   const handleReturn = () => {
-    navigate('/#booking');
+    navigate('/dashboard');
   };
 
   return (
@@ -84,27 +102,27 @@ const PaymentComplete = () => {
               </div>
             ) : status === 'success' ? (
               <div className="py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900">Payment Successful!</h2>
-                <p className="text-slate-600 mt-2 mb-6">Your booking has been confirmed</p>
-                <Button onClick={handleReturn} className="w-full">
-                  Return to Booking
+                <h2 className="text-xl font-semibold mt-4 text-green-600">Payment Successful!</h2>
+                <p className="text-slate-600 mt-2">Your booking has been confirmed.</p>
+                <Button onClick={handleReturn} className="mt-6">
+                  View Booking
                 </Button>
               </div>
             ) : (
               <div className="py-8">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900">Payment Failed</h2>
-                <p className="text-slate-600 mt-2 mb-6">There was an error processing your payment</p>
-                <Button onClick={handleReturn} variant="outline" className="w-full">
+                <h2 className="text-xl font-semibold mt-4 text-red-600">Payment Failed</h2>
+                <p className="text-slate-600 mt-2">There was an error processing your payment.</p>
+                <Button onClick={handleReturn} className="mt-6">
                   Try Again
                 </Button>
               </div>

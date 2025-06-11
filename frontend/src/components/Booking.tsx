@@ -180,8 +180,8 @@ const Booking = () => {
       if (bookingType === 'free') {
         try {
           const response = await api.createBooking(bookingData);
-          toast({
-            title: 'Success',
+        toast({
+          title: 'Success',
             description: response.message,
           });
           if (response.warning) {
@@ -207,7 +207,7 @@ const Booking = () => {
             title: 'Booking Failed',
             description: apiError.response?.data?.error || apiError.message || 'Unable to book session',
             variant: 'destructive',
-          });
+        });
         }
       } else {
         const cost = calculateCost().replace('$', '');
@@ -220,18 +220,18 @@ const Booking = () => {
         }));
 
         try {
-          const paymentResponse = await api.initiatePayment({
-            amount: cost,
-            email: user.email,
-            name: user.name,
-            tx_ref,
-            redirect_url: `${window.location.origin}/payment-complete`,
-            booking_data: bookingData,
-          });
+        const paymentResponse = await api.initiatePayment({
+          amount: cost,
+          email: user.email,
+          name: user.name,
+          tx_ref,
+          redirect_url: `${window.location.origin}/payment-complete`,
+          booking_data: bookingData,
+        });
 
-          // Redirect to Flutterwave checkout
-          window.location.href = paymentResponse.data.link;
-          return;
+        // Redirect to Flutterwave checkout
+        window.location.href = paymentResponse.data.link;
+        return;
         } catch (error) {
           const apiError = error as ApiError;
           console.error('Failed to initiate payment:', {
@@ -402,15 +402,15 @@ const Booking = () => {
                                 <SelectValue placeholder="Select a time" />
                               </SelectTrigger>
                               <SelectContent>
-                                {freeTimeSlots.map((time) => (
+                              {freeTimeSlots.map((time) => (
                                   <SelectItem
-                                    key={time}
+                                  key={time}
                                     value={time}
-                                    disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                  >
-                                    {time}
+                                  disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                >
+                                  {time}
                                   </SelectItem>
-                                ))}
+                              ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -505,15 +505,15 @@ const Booking = () => {
                                   <SelectValue placeholder="Select start time" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {paidTimeSlots.map((time) => (
+                                {paidTimeSlots.map((time) => (
                                     <SelectItem
-                                      key={time}
+                                    key={time}
                                       value={time}
-                                      disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                    >
-                                      {time}
+                                    disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                  >
+                                    {time}
                                     </SelectItem>
-                                  ))}
+                                ))}
                                 </SelectContent>
                               </Select>
                             </div>
@@ -525,15 +525,15 @@ const Booking = () => {
                                     <SelectValue placeholder="Select end time" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {getAvailableEndTimes().map((time) => (
+                                  {getAvailableEndTimes().map((time) => (
                                       <SelectItem
-                                        key={time}
+                                      key={time}
                                         value={time}
-                                        disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
-                                      >
-                                        {time}
+                                      disabled={selectedDate && !isTimeSlotAvailable(selectedDate, time)}
+                                    >
+                                      {time}
                                       </SelectItem>
-                                    ))}
+                                  ))}
                                   </SelectContent>
                                 </Select>
                               </div>

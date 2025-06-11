@@ -69,9 +69,9 @@ router.post('/google', async (req, res) => {
 
     // Store or update user
     const user = await new Promise((resolve, reject) => {
-      const createdAt = new Date().toISOString();
+    const createdAt = new Date().toISOString();
       // Include role in INSERT
-      db.run(
+    db.run(
         'INSERT OR IGNORE INTO users (email, name, picture, role, createdAt) VALUES (?, ?, ?, ?, ?)',
         [payload.email, payload.name, payload.picture, isAdmin ? 'admin' : 'user', createdAt],
         function(err) {
@@ -83,9 +83,9 @@ router.post('/google', async (req, res) => {
           db.get('SELECT * FROM users WHERE email = ?', [payload.email], (err, user) => {
             if (err) reject(err);
             else resolve(user);
-          });
-        }
-      );
+        });
+      }
+    );
     });
 
     // Create JWT token

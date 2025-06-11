@@ -11,46 +11,81 @@ const db = new sqlite3.Database(dbPath, (err) => {
     return;
   }
   console.log('Connected to SQLite database at:', dbPath);
+
+  // Run migrations
+  runMigrations();
 });
 
-// Create bookings table if it doesn't exist
-const createBookingsTableSql = `
-CREATE TABLE IF NOT EXISTS bookings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date TEXT NOT NULL,
-  time TEXT NOT NULL,
-  endTime TEXT,
-  type TEXT NOT NULL,
-  cost TEXT,
-  email TEXT,
-  createdAt TEXT NOT NULL,
-  paid INTEGER DEFAULT 0,
-  meet_link TEXT
-)`;
-db.run(createBookingsTableSql);
+// Function to run migrations
+function runMigrations() {
+  const migrationsDir = path.join(__dirname, 'migrations');
 
-// Create users table if it doesn't exist
-const createUsersTableSql = `
-CREATE TABLE IF NOT EXISTS users (
+  // Create migrations table if it doesn't exist
+  db.run(`
+    CREATE TABLE IF NOT EXISTS migrations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE,
-  name TEXT,
-  picture TEXT,
-  role TEXT DEFAULT 'user',
-  createdAt TEXT NOT NULL
-)`;
-db.run(createUsersTableSql);
+      name TEXT NOT NULL UNIQUE,
+      applied_at TEXT NOT NULL
+    )
+  `, (err) => {
+    if (err) {
+      console.error('Error creating migrations table:', err);
+      return;
+    }
 
-// Create settings table if it doesn't exist
-const createSettingsTableSql = `
-CREATE TABLE IF NOT EXISTS settings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  workDays TEXT DEFAULT '1,2,3,4,5',
-  workStart INTEGER DEFAULT 9,
-  workEnd INTEGER DEFAULT 17,
-  bufferMinutes INTEGER DEFAULT 60
-)`;
-db.run(createSettingsTableSql);
+    // Get list of migration files
+    fs.readdir(migrationsDir, (err, files) => {
+      if (err) {
+        console.error('Error reading migrations directory:', err);
+        return;
+      }
+
+      // Filter for .sql files and sort them
+      const migrations = files
+        .filter(f => f.endsWith('.sql'))
+        .sort();
+
+      // Get already applied migrations
+      db.all('SELECT name FROM migrations', [], (err, applied) => {
+        if (err) {
+          console.error('Error checking applied migrations:', err);
+          return;
+        }
+
+        const appliedMigrations = new Set(applied.map(m => m.name));
+
+        // Run each migration that hasn't been applied yet
+        migrations.forEach(migration => {
+          if (!appliedMigrations.has(migration)) {
+            const migrationPath = path.join(migrationsDir, migration);
+            const sql = fs.readFileSync(migrationPath, 'utf8');
+
+            db.serialize(() => {
+              db.exec('BEGIN TRANSACTION');
+
+              try {
+                // Run the migration
+                db.exec(sql);
+
+                // Record the migration
+                db.run(
+                  'INSERT INTO migrations (name, applied_at) VALUES (?, ?)',
+                  [migration, new Date().toISOString()]
+                );
+
+                db.exec('COMMIT');
+                console.log(`Applied migration: ${migration}`);
+              } catch (err) {
+                db.exec('ROLLBACK');
+                console.error(`Error applying migration ${migration}:`, err);
+              }
+            });
+          }
+        });
+      });
+    });
+  });
+}
 
 // Helper to get workdays/hours/buffer from DB
 function getWorkSettings(callback) {
@@ -64,12 +99,12 @@ function getWorkSettings(callback) {
         bufferMinutes: 60 // 1 hour buffer between sessions
       });
     } else {
-      callback(null, {
-        workDays: row.workDays.split(',').map(Number),
-        workStart: row.workStart,
-        workEnd: row.workEnd,
+    callback(null, {
+      workDays: row.workDays.split(',').map(Number),
+      workStart: row.workStart,
+      workEnd: row.workEnd,
         bufferMinutes: row.bufferMinutes
-      });
+    });
     }
   });
 }

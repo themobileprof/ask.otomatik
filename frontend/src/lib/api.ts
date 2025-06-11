@@ -14,6 +14,10 @@ export interface Booking {
   cost: string;
   email: string;
   createdAt: string;
+  meet_link?: string;
+  paid: boolean;
+  status: 'confirmed' | 'cancelled';
+  cancelled_at?: string;
 }
 
 export interface User {
@@ -63,6 +67,11 @@ export interface BookingResponse {
   warning?: string;
 }
 
+export interface CancelBookingResponse {
+  message: string;
+  refunded: boolean;
+}
+
 interface Wallet {
   id: number;
   user_id: number;
@@ -92,6 +101,17 @@ interface PaymentInitiateResponse {
   data?: {
     link: string;
   };
+}
+
+interface SettingsResponse {
+  workDays: number[];
+  workStart: number;
+  workEnd: number;
+  bufferMinutes: number;
+}
+
+interface WalletUpdateResponse {
+  wallet: Wallet;
 }
 
 // API Client
@@ -219,8 +239,8 @@ class ApiClient {
   }
 
   async getBookings() {
-    const response = await this.get('/api/bookings');
-    return response.data;
+    const response = await this.get<{ data: { bookings: Booking[] } }>('/api/bookings');
+    return response.data.data;
   }
 
   async getAvailability(): Promise<AvailabilityResponse> {
@@ -230,6 +250,11 @@ class ApiClient {
 
   async markBookingAsPaid(bookingId: number) {
     const response = await this.patch(`/api/bookings/${bookingId}/mark-paid`);
+    return response.data;
+  }
+
+  async cancelBooking(bookingId: number) {
+    const response = await this.post<CancelBookingResponse>(`/api/bookings/${bookingId}/cancel`);
     return response.data;
   }
 
@@ -259,8 +284,8 @@ class ApiClient {
   }
 
   async getSettings() {
-    const response = await this.get('/api/admin/settings');
-    return response.data;
+    const response = await this.get<SettingsResponse>('/api/admin/settings');
+    return response;
   }
 
   async updateSettings(data: any) {
@@ -279,13 +304,8 @@ class ApiClient {
     return response.data;
   }
 
-  async topUpWallet(amount: number) {
-    const response = await this.post<{ wallet: Wallet }>('/api/wallet/topup', { amount });
-    return response.data;
-  }
-
   async debitWallet(amount: number, description: string) {
-    const response = await this.post<{ wallet: Wallet }>('/api/wallet/debit', { amount, description });
+    const response = await this.post<WalletUpdateResponse>('/api/wallet/debit', { amount, description });
     return response.data;
   }
 

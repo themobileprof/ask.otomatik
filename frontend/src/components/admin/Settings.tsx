@@ -51,6 +51,13 @@ const formSchema = z.object({
 
 type SettingsFormValues = z.infer<typeof formSchema>;
 
+interface SettingsResponse {
+  workDays: number[];
+  workStart: number;
+  workEnd: number;
+  bufferMinutes: number;
+}
+
 const Settings = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -71,8 +78,18 @@ const Settings = () => {
 
   const loadSettings = async () => {
     try {
-      const settings = await api.getSettings();
-      form.reset(settings);
+      const response = await api.getSettings();
+      const settings = response.data as SettingsResponse;
+      
+      // Validate the settings against our schema
+      const validatedSettings = formSchema.parse({
+        workDays: settings.workDays,
+        workStart: settings.workStart,
+        workEnd: settings.workEnd,
+        bufferMinutes: settings.bufferMinutes,
+      });
+      
+      form.reset(validatedSettings);
     } catch (error) {
       toast({
         title: 'Error',

@@ -1,9 +1,51 @@
 const express = require('express');
 const { db, getWorkSettings } = require('../db/db');
-const { addBookingToGoogleCalendar } = require('../db/googleCalendar');
+const { addBookingToGoogleCalendar, deleteBookingFromGoogleCalendar } = require('../db/googleCalendar');
 const { authenticateJWT } = require('./auth-middleware');
+const { differenceInDays } = require('date-fns');
 
 const router = express.Router();
+
+// Helper function to get wallet by user_id
+const getWalletByUserId = (userId) => {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM wallets WHERE user_id = ?', [userId], (err, wallet) => {
+      if (err) reject(err);
+      else resolve(wallet);
+    });
+  });
+};
+
+// Helper function to create a wallet transaction
+const createWalletTransaction = (walletId, amount, type, description, performedBy) => {
+  return new Promise((resolve, reject) => {
+    const createdAt = new Date().toISOString();
+    db.run(
+      'INSERT INTO wallet_transactions (wallet_id, amount, type, description, performed_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [walletId, amount, type, description, performedBy, createdAt],
+      function(err) {
+        if (err) reject(err);
+        else resolve(this.lastID);
+      }
+    );
+  });
+};
+
+// Helper function to update wallet balance
+const updateWalletBalance = (walletId, amount, type) => {
+  return new Promise((resolve, reject) => {
+    const updatedAt = new Date().toISOString();
+    const operation = type === 'credit' ? '+' : '-';
+    db.run(
+      `UPDATE wallets SET balance = balance ${operation} ?, updated_at = ? WHERE id = ?`,
+      [amount, updatedAt, walletId],
+      function(err) {
+        if (err) reject(err);
+        else resolve(this.changes);
+      }
+    );
+  });
+};
 
 // Public routes (no authentication required)
 // GET /api/bookings/availability
@@ -215,6 +257,108 @@ router.patch('/:id/mark-paid', async (req, res) => {
       });
     });
   });
+});
+
+// POST /api/bookings/:id/cancel
+router.post('/:id/cancel', authenticateJWT, async (req, res) => {
+  const bookingId = req.params.id;
+  
+  try {
+    // Get the booking
+    const booking = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Check if the booking belongs to the user or if user is admin
+    if (booking.email !== req.user.email && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Check if booking is already cancelled
+    if (booking.status === 'cancelled') {
+      return res.status(400).json({ error: 'Booking is already cancelled' });
+    }
+
+    // Check if booking is in the future
+    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
+    const currentDate = new Date();
+    const daysUntilBooking = differenceInDays(bookingDate, currentDate);
+
+    // Only allow cancellation if more than 7 days until the booking
+    if (daysUntilBooking <= 7) {
+      return res.status(400).json({ 
+        error: 'Cannot cancel booking less than 7 days before the session' 
+      });
+    }
+
+    // If it's a paid booking, process refund to wallet
+    if (booking.type === 'paid' && booking.paid) {
+      const cost = parseFloat(booking.cost);
+      if (cost > 0) {
+        // Get or create user's wallet
+        let wallet = await getWalletByUserId(req.user.id);
+        if (!wallet) {
+          const timestamp = new Date().toISOString();
+          await new Promise((resolve, reject) => {
+            db.run(
+              'INSERT INTO wallets (user_id, balance, created_at, updated_at) VALUES (?, 0, ?, ?)',
+              [req.user.id, timestamp, timestamp],
+              function(err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+              }
+            );
+          });
+          wallet = await getWalletByUserId(req.user.id);
+        }
+
+        // Create refund transaction
+        await createWalletTransaction(
+          wallet.id,
+          cost,
+          'credit',
+          `Refund for cancelled booking #${bookingId}`,
+          req.user.id
+        );
+
+        // Update wallet balance
+        await updateWalletBalance(wallet.id, cost, 'credit');
+      }
+    }
+
+    // Delete from Google Calendar if event_id exists
+    if (booking.event_id) {
+      await deleteBookingFromGoogleCalendar(booking.event_id);
+    }
+
+    // Update booking status
+    const cancelledAt = new Date().toISOString();
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE bookings SET status = ?, cancelled_at = ? WHERE id = ?',
+        ['cancelled', cancelledAt, bookingId],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        }
+      );
+    });
+
+    res.json({ 
+      message: 'Booking cancelled successfully',
+      refunded: booking.type === 'paid' && booking.paid
+    });
+  } catch (error) {
+    console.error('Failed to cancel booking:', error);
+    res.status(500).json({ error: 'Failed to cancel booking' });
+  }
 });
 
 module.exports = router;

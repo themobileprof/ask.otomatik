@@ -20,12 +20,21 @@ interface Wallet {
   updated_at: string;
 }
 
+interface WalletResponse {
+  wallet: Wallet;
+  transactions: WalletTransaction[];
+}
+
+interface WalletUpdateResponse {
+  message: string;
+  wallet: Wallet;
+}
+
 interface WalletContextType {
   wallet: Wallet | null;
   transactions: WalletTransaction[];
   isLoading: boolean;
   fetchWallet: () => Promise<void>;
-  topUpWallet: (amount: number) => Promise<void>;
   debitWallet: (amount: number, description: string) => Promise<boolean>;
 }
 
@@ -47,7 +56,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      const response = await api.get('/api/wallet');
+      const response = await api.get<WalletResponse>('/api/wallet');
       setWallet(response.data.wallet);
       setTransactions(response.data.transactions);
     } catch (error) {
@@ -62,29 +71,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const topUpWallet = async (amount: number) => {
-    try {
-      const response = await api.post('/api/wallet/topup', { amount });
-      setWallet(response.data.wallet);
-      await fetchWallet(); // Refresh transactions
-      toast({
-        title: "Success",
-        description: "Wallet topped up successfully",
-      });
-    } catch (error) {
-      console.error('Failed to top up wallet:', error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to top up wallet",
-      });
-      throw error;
-    }
-  };
-
   const debitWallet = async (amount: number, description: string): Promise<boolean> => {
     try {
-      const response = await api.post('/api/wallet/debit', { amount, description });
+      const response = await api.post<WalletUpdateResponse>('/api/wallet/debit', { amount, description });
       setWallet(response.data.wallet);
       await fetchWallet(); // Refresh transactions
       toast({
@@ -116,7 +105,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         transactions,
         isLoading,
         fetchWallet,
-        topUpWallet,
         debitWallet,
       }}
     >

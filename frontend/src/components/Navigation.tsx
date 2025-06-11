@@ -41,12 +41,12 @@ const Navigation = () => {
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center space-x-8">
             {menuItems.map((item) => (
-              <a
+            <a 
                 key={item.label}
                 href={item.href}
-                className="text-slate-600 hover:text-slate-900"
+              className="text-slate-600 hover:text-slate-900"
                 onClick={(e) => handleAnchorClick(e, item.href.substring(2))}
-              >
+            >
                 {item.label}
               </a>
             ))}

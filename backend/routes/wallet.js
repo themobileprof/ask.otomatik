@@ -89,44 +89,6 @@ router.get('/', authenticateJWT, async (req, res) => {
   }
 });
 
-// POST /api/wallet/topup - Top up wallet (for Flutterwave integration)
-router.post('/topup', authenticateJWT, async (req, res) => {
-  const { amount } = req.body;
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ error: 'Invalid amount' });
-  }
-
-  try {
-    let wallet = await getWalletByUserId(req.user.id);
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
-    }
-
-    // Create transaction record
-    await createWalletTransaction(
-      wallet.id,
-      amount,
-      'credit',
-      'Wallet top-up',
-      req.user.id
-    );
-
-    // Update wallet balance
-    await updateWalletBalance(wallet.id, amount, 'credit');
-
-    // Get updated wallet
-    wallet = await getWalletByUserId(req.user.id);
-    
-    res.json({ 
-      message: 'Wallet topped up successfully',
-      wallet 
-    });
-  } catch (error) {
-    console.error('Wallet top-up error:', error);
-    res.status(500).json({ error: 'Failed to top up wallet' });
-  }
-});
-
 // POST /api/wallet/admin/topup - Admin top up user's wallet
 router.post('/admin/topup', authenticateJWT, async (req, res) => {
   if (req.user.role !== 'admin') {
