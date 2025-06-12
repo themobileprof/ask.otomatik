@@ -265,60 +265,41 @@ const SubscriptionCalendar = () => {
             </div>
           </div>
 
-          <Calendar
-            mode="single"
-            selected={date}
-            onSelect={setDate}
-            className={cn("rounded-md border")}
-            disabled={(date) => {
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              return date < today || isDateUnavailable(date);
-            }}
-            modifiers={{
-              busy: (date) => isDateUnavailable(date),
-            }}
-            modifiersStyles={{
-              busy: { backgroundColor: "rgb(254 226 226)", color: "rgb(220 38 38)" },
-            }}
-          />
-          
-          {date && (
-            <div className="space-y-4">
-              <h3 className="font-medium">Selected Date: {format(date, 'MMMM d, yyyy')}</h3>
-              
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Calendar
+              mode="single"
+              selected={date}
+              onSelect={setDate}
+              className={cn("rounded-md border w-full")}
+              disabled={(date) => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return date < today || isDateUnavailable(date);
+              }}
+              modifiers={{
+                busy: (date) => isDateUnavailable(date),
+              }}
+              modifiersStyles={{
+                busy: { backgroundColor: "rgb(254 226 226)", color: "rgb(220 38 38)" },
+              }}
+            />
+            
+            {date ? (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium">Start Time</span>
-                  </div>
-                  <Select value={selectedTime} onValueChange={handleTimeSelect}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select start time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAvailableTimeSlots().map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedTime && (
+                <h3 className="font-medium">Selected Date: {format(date, 'MMMM d, yyyy')}</h3>
+                
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-blue-600" />
-                      <span className="text-sm font-medium">End Time</span>
+                      <span className="text-sm font-medium">Start Time</span>
                     </div>
-                    <Select value={selectedEndTime} onValueChange={handleEndTimeSelect}>
+                    <Select value={selectedTime} onValueChange={handleTimeSelect}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select end time" />
+                        <SelectValue placeholder="Select start time" />
                       </SelectTrigger>
                       <SelectContent>
-                        {getAvailableEndTimes().map((time) => (
+                        {getAvailableTimeSlots().map((time) => (
                           <SelectItem key={time} value={time}>
                             {time}
                           </SelectItem>
@@ -326,39 +307,64 @@ const SubscriptionCalendar = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {selectedTime && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium">End Time</span>
+                      </div>
+                      <Select value={selectedEndTime} onValueChange={handleEndTimeSelect}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select end time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableEndTimes().map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
+                {selectedTime && selectedEndTime && (
+                  <div className="flex justify-between items-center text-sm text-slate-700 bg-white p-3 rounded-lg">
+                    <span>Duration: {calculateDuration()}</span>
+                    <span className="font-semibold">{calculateCost()}</span>
+                  </div>
                 )}
+
+                {availability && (
+                  <div className="text-sm text-gray-500">
+                    <p>Working Hours: {availability.workStart}:00 - {availability.workEnd}:00</p>
+                    <p>Buffer between sessions: {availability.bufferMinutes} minutes</p>
+                  </div>
+                )}
+                
+                <Button
+                  className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                  onClick={handleBookSession}
+                  disabled={!selectedTime || !selectedEndTime || isBooking}
+                >
+                  {isBooking ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Book Session'
+                  )}
+                </Button>
               </div>
-
-              {selectedTime && selectedEndTime && (
-                <div className="flex justify-between items-center text-sm text-slate-700 bg-white p-3 rounded-lg">
-                  <span>Duration: {calculateDuration()}</span>
-                  <span className="font-semibold">{calculateCost()}</span>
-                </div>
-              )}
-
-              {availability && (
-                <div className="text-sm text-gray-500">
-                  <p>Working Hours: {availability.workStart}:00 - {availability.workEnd}:00</p>
-                  <p>Buffer between sessions: {availability.bufferMinutes} minutes</p>
-                </div>
-              )}
-              
-              <Button
-                className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-                onClick={handleBookSession}
-                disabled={!selectedTime || !selectedEndTime || isBooking}
-              >
-                {isBooking ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  'Book Session'
-                )}
-              </Button>
-            </div>
-          )}
+            ) : (
+              <div className="hidden lg:flex items-center justify-center h-full text-gray-500">
+                Select a date to view available time slots
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

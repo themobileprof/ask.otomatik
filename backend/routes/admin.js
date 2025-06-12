@@ -75,6 +75,7 @@ router.get('/stats', requireAdmin, (req, res) => {
       SELECT b.*, u.name as userName, u.picture as userPicture 
       FROM bookings b 
       LEFT JOIN users u ON b.email = u.email 
+      WHERE b.status != 'cancelled'
       ORDER BY b.date DESC, b.time DESC 
       LIMIT 5
     `,
@@ -82,9 +83,17 @@ router.get('/stats', requireAdmin, (req, res) => {
       SELECT b.*, u.name as userName, u.picture as userPicture 
       FROM bookings b 
       LEFT JOIN users u ON b.email = u.email 
-      WHERE date >= date('now') 
+      WHERE date >= date('now') AND status != 'cancelled'
       ORDER BY b.date ASC, b.time ASC 
       LIMIT 5
+    `,
+    cancelledBookings: `
+      SELECT b.*, u.name as userName, u.picture as userPicture 
+      FROM bookings b 
+      LEFT JOIN users u ON b.email = u.email 
+      WHERE status = 'cancelled'
+      ORDER BY b.date DESC, b.time DESC 
+      LIMIT 10
     `,
     bookingsByType: 'SELECT type, COUNT(*) as count FROM bookings GROUP BY type',
     totalUsers: 'SELECT COUNT(*) as count FROM users'
@@ -96,7 +105,7 @@ router.get('/stats', requireAdmin, (req, res) => {
 
   // Execute each query
   Object.entries(queries).forEach(([key, query]) => {
-    if (key === 'recentBookings' || key === 'upcomingBookings' || key === 'bookingsByType') {
+    if (key === 'recentBookings' || key === 'upcomingBookings' || key === 'cancelledBookings' || key === 'bookingsByType') {
       db.all(query, [], (err, rows) => {
         if (err) {
           console.error(`Error in ${key} query:`, err);

@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const AdminLayout = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
 
@@ -48,6 +48,16 @@ const AdminLayout = () => {
     navigate('/');
   };
 
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+      </div>
+    );
+  }
+
+  // Only redirect after we've finished loading and confirmed the user isn't an admin
   if (!user || user.role !== 'admin') {
     return <Navigate to="/access-denied" replace />;
   }

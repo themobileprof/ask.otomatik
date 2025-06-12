@@ -287,8 +287,19 @@ router.post('/:id/cancel', authenticateJWT, async (req, res) => {
     }
 
     // Check if booking is in the future
-    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
+    const endTimeStr = booking.endTime || booking.time; // fallback to start time if no end time
+    const [endTime, endPeriod] = endTimeStr.split(' ');
+    const [endHours, endMinutes] = endTime.split(':');
+    let endHour = parseInt(endHours);
+    
+    // Convert to 24-hour format
+    if (endPeriod === 'PM' && endHour !== 12) endHour += 12;
+    if (endPeriod === 'AM' && endHour === 12) endHour = 0;
+    
+    const bookingDate = new Date(booking.date);
+    bookingDate.setHours(endHour, parseInt(endMinutes), 0);
     const currentDate = new Date();
+    
     const daysUntilBooking = differenceInDays(bookingDate, currentDate);
 
     // Only allow cancellation if more than 7 days until the booking
@@ -366,7 +377,7 @@ router.get('/:id/comments', authenticateJWT, async (req, res) => {
   const bookingId = req.params.id;
 
   try {
-    // Get the booking first to check if it exists and if it's expired
+    // Get the booking first to check if it exists
     const booking = await new Promise((resolve, reject) => {
       db.get('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, row) => {
         if (err) reject(err);
@@ -376,14 +387,6 @@ router.get('/:id/comments', authenticateJWT, async (req, res) => {
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    // Check if the booking is expired (in the past)
-    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
-    const currentDate = new Date();
-    
-    if (bookingDate > currentDate) {
-      return res.status(403).json({ error: 'Cannot view comments for future bookings' });
     }
 
     // Get comments with user information
@@ -421,7 +424,7 @@ router.post('/:id/comments', authenticateJWT, async (req, res) => {
   }
 
   try {
-    // Get the booking first to check if it exists and if it's expired
+    // Get the booking first to check if it exists
     const booking = await new Promise((resolve, reject) => {
       db.get('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, row) => {
         if (err) reject(err);
@@ -431,14 +434,6 @@ router.post('/:id/comments', authenticateJWT, async (req, res) => {
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found' });
-    }
-
-    // Check if the booking is expired (in the past)
-    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
-    const currentDate = new Date();
-    
-    if (bookingDate > currentDate) {
-      return res.status(403).json({ error: 'Cannot comment on future bookings' });
     }
 
     // Check if user is authorized to comment (must be the booking user or an admin)

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { Wallet } from 'lucide-react';
@@ -13,7 +13,7 @@ const WalletCard = () => {
 
   if (!wallet) {
     return (
-      <Card>
+      <Card className="bg-gray-50 border-gray-200">
         <CardContent className="pt-6">
           <p className="text-center text-muted-foreground">Wallet not available</p>
         </CardContent>
@@ -23,17 +23,17 @@ const WalletCard = () => {
 
   return (
     <>
-      <Card>
+      <Card className="bg-gray-50 border-gray-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-gray-700">
+            <Wallet className="h-5 w-5 text-gray-600" />
             Wallet Balance
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col space-y-4">
-            <div className="text-3xl font-bold">${wallet.balance.toFixed(2)}</div>
-            <Button onClick={() => setIsHistoryOpen(true)}>
+            <div className="text-3xl font-bold text-gray-800">${wallet.balance.toFixed(2)}</div>
+            <Button variant="outline" onClick={() => setIsHistoryOpen(true)} className="bg-white hover:bg-gray-100">
               View Transaction History
             </Button>
           </div>
@@ -44,6 +44,9 @@ const WalletCard = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Transaction History</DialogTitle>
+            <DialogDescription>
+              View all your wallet transactions
+            </DialogDescription>
           </DialogHeader>
           {isLoading ? (
             <div className="flex justify-center p-4">

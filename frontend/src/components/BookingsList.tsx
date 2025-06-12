@@ -40,6 +40,7 @@ const BookingsList = () => {
   const [bookings, setBookings] = useState<APIBooking[]>([]);
   const [activeBookings, setActiveBookings] = useState<APIBooking[]>([]);
   const [expiredBookings, setExpiredBookings] = useState<APIBooking[]>([]);
+  const [cancelledBookings, setCancelledBookings] = useState<APIBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<APIBooking | null>(null);
@@ -71,23 +72,29 @@ const BookingsList = () => {
       const response = await api.getBookings();
       setBookings(response.bookings);
       
-      // Filter bookings into active and expired
+      // Filter bookings into active, expired, and cancelled
       const now = new Date();
       const active: APIBooking[] = [];
       const expired: APIBooking[] = [];
+      const cancelled: APIBooking[] = [];
 
       response.bookings.forEach(booking => {
-        const timeStr = booking.time;
-        const [time, period] = timeStr.split(' ');
-        const [hours, minutes] = time.split(':');
-        let hour = parseInt(hours);
+        if (booking.status === 'cancelled') {
+          cancelled.push(booking);
+          return;
+        }
+
+        const endTimeStr = booking.endTime || booking.time; // fallback to start time if no end time
+        const [endTime, endPeriod] = endTimeStr.split(' ');
+        const [endHours, endMinutes] = endTime.split(':');
+        let endHour = parseInt(endHours);
         
         // Convert to 24-hour format
-        if (period === 'PM' && hour !== 12) hour += 12;
-        if (period === 'AM' && hour === 12) hour = 0;
+        if (endPeriod === 'PM' && endHour !== 12) endHour += 12;
+        if (endPeriod === 'AM' && endHour === 12) endHour = 0;
         
         const bookingDate = new Date(booking.date);
-        bookingDate.setHours(hour, parseInt(minutes), 0);
+        bookingDate.setHours(endHour, parseInt(endMinutes), 0);
 
         if (bookingDate < now) {
           expired.push(booking);
@@ -96,12 +103,16 @@ const BookingsList = () => {
         }
       });
 
+      // Sort cancelled bookings by date (newest first)
+      cancelled.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       // Sort expired bookings by date (newest first)
       expired.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       // Sort active bookings by date (earliest first)
       active.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+      setCancelledBookings(cancelled);
       setExpiredBookings(expired);
       setActiveBookings(active);
     } catch (error) {
@@ -277,10 +288,10 @@ const BookingsList = () => {
     };
 
     useEffect(() => {
-      if (showComments && isPast) {
+      if (showComments) {
         loadComments();
       }
-    }, [showComments, booking.id, isPast]);
+    }, [showComments, booking.id]);
 
     return (
       <div
@@ -349,130 +360,128 @@ const BookingsList = () => {
               Cannot cancel within 7 days of session
             </div>
           )}
-          {isPast && (
-            <div className="mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setShowComments(!showComments)}
-              >
-                <MessageCircle className="h-4 w-4" />
-                {showComments ? 'Hide Comments' : 'Show Comments'}
-              </Button>
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowComments(!showComments)}
+            >
+              <MessageCircle className="h-4 w-4" />
+              {showComments ? 'Hide Comments' : 'Show Comments'}
+            </Button>
 
-              {showComments && (
-                <div className="mt-4 space-y-4">
-                  {!userComment && (
-                    <div className="space-y-2">
-                      <Textarea
-                        placeholder="Add your comment..."
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        className="min-h-[80px]"
-                      />
-                      <Button
-                        onClick={handleAddComment}
-                        disabled={!newComment.trim() || isAddingComment}
-                        className="w-full"
-                      >
-                        {isAddingComment ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                            Adding...
-                          </>
-                        ) : (
-                          'Add Comment'
+            {showComments && (
+              <div className="mt-4 space-y-4">
+                {!userComment && (
+                  <div className="space-y-2">
+                    <Textarea
+                      placeholder="Add your comment..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      className="min-h-[80px]"
+                    />
+                    <Button
+                      onClick={handleAddComment}
+                      disabled={!newComment.trim() || isAddingComment}
+                      className="w-full"
+                    >
+                      {isAddingComment ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                          Adding...
+                        </>
+                      ) : (
+                        'Add Comment'
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {isLoadingComments ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                  </div>
+                ) : comments.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500">
+                    No comments yet
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                        {comment.user_picture && (
+                          <img
+                            src={comment.user_picture}
+                            alt={comment.user_name}
+                            className="w-8 h-8 rounded-full"
+                          />
                         )}
-                      </Button>
-                    </div>
-                  )}
-
-                  {isLoadingComments ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-                    </div>
-                  ) : comments.length === 0 ? (
-                    <div className="text-center py-4 text-gray-500">
-                      No comments yet
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {comments.map((comment) => (
-                        <div key={comment.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
-                          {comment.user_picture && (
-                            <img
-                              src={comment.user_picture}
-                              alt={comment.user_name}
-                              className="w-8 h-8 rounded-full"
-                            />
-                          )}
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{comment.user_name}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {comment.user_role}
-                              </Badge>
-                              <span className="text-xs text-gray-500">
-                                {format(new Date(comment.created_at), 'MMM d, yyyy h:mm a')}
-                              </span>
-                            </div>
-                            {editingCommentId === comment.id ? (
-                              <div className="mt-2 space-y-2">
-                                <Textarea
-                                  value={editedComment}
-                                  onChange={(e) => setEditedComment(e.target.value)}
-                                  className="min-h-[80px]"
-                                />
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleEditComment(comment.id)}
-                                    disabled={!editedComment.trim() || isEditingComment}
-                                  >
-                                    {isEditingComment ? (
-                                      <>
-                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                                        Saving...
-                                      </>
-                                    ) : (
-                                      'Save'
-                                    )}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={cancelEditing}
-                                    disabled={isEditingComment}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <p className="mt-1 text-gray-700">{comment.comment}</p>
-                                {user && (comment.user_id === user.id || user.role === 'admin') && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="mt-2 h-8 text-gray-500 hover:text-gray-700"
-                                    onClick={() => startEditing(comment)}
-                                  >
-                                    Edit
-                                  </Button>
-                                )}
-                              </>
-                            )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{comment.user_name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {comment.user_role}
+                            </Badge>
+                            <span className="text-xs text-gray-500">
+                              {format(new Date(comment.created_at), 'MMM d, yyyy h:mm a')}
+                            </span>
                           </div>
+                          {editingCommentId === comment.id ? (
+                            <div className="mt-2 space-y-2">
+                              <Textarea
+                                value={editedComment}
+                                onChange={(e) => setEditedComment(e.target.value)}
+                                className="min-h-[80px]"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleEditComment(comment.id)}
+                                  disabled={!editedComment.trim() || isEditingComment}
+                                >
+                                  {isEditingComment ? (
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                      Saving...
+                                    </>
+                                  ) : (
+                                    'Save'
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelEditing}
+                                  disabled={isEditingComment}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="mt-1 text-gray-700">{comment.comment}</p>
+                              {user && (comment.user_id === user.id || user.role === 'admin') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="mt-2 h-8 text-gray-500 hover:text-gray-700"
+                                  onClick={() => startEditing(comment)}
+                                >
+                                  Edit
+                                </Button>
+                              )}
+                            </>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -525,47 +534,87 @@ const BookingsList = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
         <CardTitle>Your Bookings</CardTitle>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <History className="h-4 w-4" />
-              Past Bookings
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[900px]">
-            <DialogHeader>
-              <DialogTitle>Past Bookings</DialogTitle>
-              <DialogDescription>
-                History of all completed consultations
-              </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-                </div>
-              ) : expiredBookings.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No past bookings found
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {expiredBookings.map((booking) => (
-                    <BookingCard key={booking.id} booking={booking} isPast={true} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <X className="h-4 w-4" />
+                Cancelled Bookings
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[900px]">
+              <DialogHeader>
+                <DialogTitle>Cancelled Bookings</DialogTitle>
+                <DialogDescription>
+                  History of all cancelled consultations
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                  </div>
+                ) : cancelledBookings.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No cancelled bookings found
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {cancelledBookings.map((booking) => (
+                      <BookingCard key={booking.id} booking={booking} isPast={true} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <History className="h-4 w-4" />
+                Past Bookings
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[900px]">
+              <DialogHeader>
+                <DialogTitle>Past Bookings</DialogTitle>
+                <DialogDescription>
+                  History of all completed consultations
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                  </div>
+                ) : expiredBookings.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No past bookings found
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {expiredBookings.map((booking) => (
+                      <BookingCard key={booking.id} booking={booking} isPast={true} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {activeBookings.map((booking) => (
             <BookingCard key={booking.id} booking={booking} isPast={false} />
           ))}
+          {activeBookings.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No upcoming bookings
+            </div>
+          )}
         </div>
       </CardContent>
 
@@ -578,12 +627,14 @@ const BookingsList = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Session</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedBooking?.type === 'paid' 
-                ? 'Are you sure you want to cancel this session? The cost will be refunded to your wallet.'
-                : 'Are you sure you want to cancel this session?'
-              }
-              <div className="mt-4">
+            <div className="space-y-4">
+              <AlertDialogDescription>
+                {selectedBooking?.type === 'paid' 
+                  ? 'Are you sure you want to cancel this session? The cost will be refunded to your wallet.'
+                  : 'Are you sure you want to cancel this session?'
+                }
+              </AlertDialogDescription>
+              <div>
                 <div className="text-sm text-muted-foreground mb-2">
                   Type "cancel session" to confirm cancellation
                 </div>
@@ -594,7 +645,7 @@ const BookingsList = () => {
                   className="w-full"
                 />
               </div>
-            </AlertDialogDescription>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Session</AlertDialogCancel>

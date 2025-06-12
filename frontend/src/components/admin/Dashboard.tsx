@@ -17,7 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, DollarSign, Users, Clock, History } from 'lucide-react';
+import { Calendar, DollarSign, Users, Clock, History, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +52,7 @@ interface Stats {
   bookingsByType: Array<{ type: string; count: number }>;
   recentBookings: Booking[];
   upcomingBookings: Booking[];
+  cancelledBookings: Booking[];
 }
 
 const Dashboard = () => {
@@ -63,12 +64,14 @@ const Dashboard = () => {
     totalUsers: 0,
     bookingsByType: [],
     recentBookings: [],
-    upcomingBookings: []
+    upcomingBookings: [],
+    cancelledBookings: []
   });
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [expiredBookings, setExpiredBookings] = useState<Booking[]>([]);
   const [activeBookings, setActiveBookings] = useState<Booking[]>([]);
+  const [cancelledBookings, setCancelledBookings] = useState<Booking[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -97,9 +100,12 @@ const Dashboard = () => {
         return date;
       };
 
-      // Combine all bookings and sort them
+      // Process active and expired bookings (excluding cancelled)
       const allBookings = [...response.recentBookings, ...response.upcomingBookings];
       allBookings.forEach(booking => {
+        // Skip cancelled bookings entirely as they'll be handled separately
+        if (booking.status === 'cancelled') return;
+
         const bookingDate = parseBookingDateTime(booking);
         if (bookingDate < now) {
           expired.push(booking);
@@ -122,6 +128,14 @@ const Dashboard = () => {
         return dateA.getTime() - dateB.getTime();
       });
 
+      // Sort cancelled bookings by date (newest first)
+      const sortedCancelledBookings = [...response.cancelledBookings].sort((a, b) => {
+        const dateA = parseBookingDateTime(a);
+        const dateB = parseBookingDateTime(b);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      setCancelledBookings(sortedCancelledBookings);
       setExpiredBookings(expired);
       setActiveBookings(active);
       setStats(response);
@@ -202,37 +216,70 @@ const Dashboard = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <History className="h-4 w-4" />
-              View Past Bookings
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[900px]">
-            <DialogHeader>
-              <DialogTitle>Past Bookings</DialogTitle>
-              <DialogDescription>
-                History of all completed consultations
-              </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-                </div>
-              ) : expiredBookings.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No past bookings found
-                </div>
-              ) : (
-                <div className="max-h-[60vh] overflow-y-auto">
-                  <BookingsTable bookings={expiredBookings} />
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <X className="h-4 w-4" />
+                Cancelled Bookings
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[900px]">
+              <DialogHeader>
+                <DialogTitle>Cancelled Bookings</DialogTitle>
+                <DialogDescription>
+                  History of all cancelled consultations
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                  </div>
+                ) : cancelledBookings.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No cancelled bookings found
+                  </div>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    <BookingsTable bookings={cancelledBookings} />
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <History className="h-4 w-4" />
+                Past Bookings
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[900px]">
+              <DialogHeader>
+                <DialogTitle>Past Bookings</DialogTitle>
+                <DialogDescription>
+                  History of all completed consultations
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4">
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                  </div>
+                ) : expiredBookings.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No past bookings found
+                  </div>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    <BookingsTable bookings={expiredBookings} />
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
