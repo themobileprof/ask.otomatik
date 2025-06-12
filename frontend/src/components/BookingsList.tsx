@@ -154,12 +154,31 @@ const BookingsList = () => {
 
   const canCancel = (booking: APIBooking) => {
     if (booking.status === 'cancelled') return false;
-    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
-    const daysUntilBooking = differenceInDays(bookingDate, new Date());
+    
+    // Parse the booking time properly
+    const [time, period] = booking.time.split(' ');
+    const [hours, minutes] = time.split(':');
+    let hour = parseInt(hours);
+    
+    // Convert to 24-hour format
+    if (period === 'PM' && hour !== 12) hour += 12;
+    if (period === 'AM' && hour === 12) hour = 0;
+    
+    // Create booking date with proper time
+    const bookingDate = new Date(booking.date);
+    bookingDate.setHours(hour, parseInt(minutes), 0, 0);
+    
+    // Get current date with time set to midnight
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    // Calculate days difference
+    const daysUntilBooking = Math.ceil((bookingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
     return daysUntilBooking > 7;
   };
 
-  const BookingCard = ({ booking }: { booking: APIBooking }) => (
+  const BookingCard = ({ booking, isPast }: { booking: APIBooking, isPast?: boolean }) => (
     <div
       className={cn(
         "p-4 rounded-lg border",
@@ -176,7 +195,7 @@ const BookingsList = () => {
               <Badge variant="destructive">Cancelled</Badge>
             )}
           </div>
-          {canCancel(booking) && (
+          {!isPast && canCancel(booking) && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -209,7 +228,7 @@ const BookingsList = () => {
             {booking.time} - {booking.endTime}
           </div>
         </div>
-        {booking.meet_link && booking.status !== 'cancelled' && (
+        {!isPast && booking.meet_link && booking.status !== 'cancelled' && (
           <a
             href={booking.meet_link}
             target="_blank"
@@ -220,7 +239,7 @@ const BookingsList = () => {
             Join Meeting
           </a>
         )}
-        {!canCancel(booking) && booking.status !== 'cancelled' && (
+        {!isPast && !canCancel(booking) && booking.status !== 'cancelled' && (
           <div className="flex items-center text-amber-600 text-sm mt-2">
             <AlertTriangle className="w-4 h-4 mr-1" />
             Cannot cancel within 7 days of session
@@ -305,7 +324,7 @@ const BookingsList = () => {
               ) : (
                 <div className="space-y-4">
                   {expiredBookings.map((booking) => (
-                    <BookingCard key={booking.id} booking={booking} />
+                    <BookingCard key={booking.id} booking={booking} isPast={true} />
                   ))}
                 </div>
               )}
@@ -316,7 +335,7 @@ const BookingsList = () => {
       <CardContent>
         <div className="space-y-4">
           {activeBookings.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} />
+            <BookingCard key={booking.id} booking={booking} isPast={false} />
           ))}
         </div>
       </CardContent>
