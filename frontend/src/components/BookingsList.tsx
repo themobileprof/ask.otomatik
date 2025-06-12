@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { api, Booking as APIBooking } from '@/lib/api';
+import { api, Booking as APIBooking, BookingComment } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format, differenceInDays } from 'date-fns';
-import { Clock, Calendar, Link as LinkIcon, X, AlertTriangle, History } from 'lucide-react';
+import { Clock, Calendar, Link as LinkIcon, X, AlertTriangle, History, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useWallet } from '@/contexts/WalletContext';
 import {
@@ -32,7 +32,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/contexts/AuthContext';
 
 const BookingsList = () => {
   const [bookings, setBookings] = useState<APIBooking[]>([]);
@@ -46,6 +48,7 @@ const BookingsList = () => {
   const { toast } = useToast();
   const { fetchWallet } = useWallet();
   const [loadingTimeoutId, setLoadingTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Add a small delay before loading to avoid rapid successive calls
@@ -178,76 +181,302 @@ const BookingsList = () => {
     return daysUntilBooking > 7;
   };
 
-  const BookingCard = ({ booking, isPast }: { booking: APIBooking, isPast?: boolean }) => (
-    <div
-      className={cn(
-        "p-4 rounded-lg border",
-        booking.status === 'cancelled' ? 'bg-gray-50 border-gray-200' : 'bg-white border-blue-100'
-      )}
-    >
-      <div className="flex flex-col space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Badge variant={booking.type === 'free' ? 'secondary' : 'default'}>
-              {booking.type === 'free' ? 'Free Session' : 'Paid Session'}
-            </Badge>
-            {booking.status === 'cancelled' && (
-              <Badge variant="destructive">Cancelled</Badge>
+  interface BookingCardProps {
+    booking: APIBooking;
+    isPast?: boolean;
+  }
+
+  const BookingCard = ({ booking, isPast }: BookingCardProps) => {
+    const [showComments, setShowComments] = useState(false);
+    const [comments, setComments] = useState<BookingComment[]>([]);
+    const [newComment, setNewComment] = useState('');
+    const [isLoadingComments, setIsLoadingComments] = useState(false);
+    const [isAddingComment, setIsAddingComment] = useState(false);
+    const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+    const [editedComment, setEditedComment] = useState('');
+    const [isEditingComment, setIsEditingComment] = useState(false);
+    const { toast } = useToast();
+    const { user } = useAuth();
+
+    const userComment = user ? comments.find(comment => comment.user_id === user.id) : null;
+
+    const loadComments = async () => {
+      try {
+        setIsLoadingComments(true);
+        const response = await api.getBookingComments(booking.id);
+        setComments(response.comments);
+      } catch (error: any) {
+        console.error('Failed to load comments:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.response?.data?.error || error.message || "Failed to load comments",
+        });
+      } finally {
+        setIsLoadingComments(false);
+      }
+    };
+
+    const handleAddComment = async () => {
+      if (!newComment.trim()) return;
+
+      try {
+        setIsAddingComment(true);
+        const response = await api.addBookingComment(booking.id, newComment.trim());
+        setComments(prev => [response.comment, ...prev]);
+        setNewComment('');
+        toast({
+          title: "Success",
+          description: "Comment added successfully",
+        });
+      } catch (error: any) {
+        console.error('Failed to add comment:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.response?.data?.error || error.message || "Failed to add comment",
+        });
+      } finally {
+        setIsAddingComment(false);
+      }
+    };
+
+    const handleEditComment = async (commentId: number) => {
+      if (!editedComment.trim()) return;
+
+      try {
+        setIsEditingComment(true);
+        const response = await api.editBookingComment(booking.id, commentId, editedComment.trim());
+        setComments(prev => prev.map(c => c.id === commentId ? response.comment : c));
+        setEditingCommentId(null);
+        setEditedComment('');
+        toast({
+          title: "Success",
+          description: "Comment updated successfully",
+        });
+      } catch (error: any) {
+        console.error('Failed to update comment:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error.response?.data?.error || error.message || "Failed to update comment",
+        });
+      } finally {
+        setIsEditingComment(false);
+      }
+    };
+
+    const startEditing = (comment: BookingComment) => {
+      setEditingCommentId(comment.id);
+      setEditedComment(comment.comment);
+    };
+
+    const cancelEditing = () => {
+      setEditingCommentId(null);
+      setEditedComment('');
+    };
+
+    useEffect(() => {
+      if (showComments && isPast) {
+        loadComments();
+      }
+    }, [showComments, booking.id, isPast]);
+
+    return (
+      <div
+        className={cn(
+          "p-4 rounded-lg border",
+          booking.status === 'cancelled' ? 'bg-gray-50 border-gray-200' : 'bg-white border-blue-100'
+        )}
+      >
+        <div className="flex flex-col space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Badge variant={booking.type === 'free' ? 'secondary' : 'default'}>
+                {booking.type === 'free' ? 'Free Session' : 'Paid Session'}
+              </Badge>
+              {booking.status === 'cancelled' && (
+                <Badge variant="destructive">Cancelled</Badge>
+              )}
+            </div>
+            {!isPast && canCancel(booking) && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-red-50"
+                      onClick={() => setSelectedBooking(booking)}
+                    >
+                      <X className="h-4 w-4 text-red-500 hover:text-red-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Cancel session</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
+            <span className="text-lg font-semibold">
+              {booking.type === 'paid' ? `$${booking.cost}` : 'Free'}
+            </span>
           </div>
-          {!isPast && canCancel(booking) && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 hover:bg-red-50"
-                    onClick={() => setSelectedBooking(booking)}
-                  >
-                    <X className="h-4 w-4 text-red-500 hover:text-red-600" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Cancel session</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          <div className="flex items-center space-x-4 text-sm text-gray-600">
+            <div className="flex items-center">
+              <Calendar className="w-4 h-4 mr-1" />
+              {format(new Date(booking.date), 'MMM d, yyyy')}
+            </div>
+            <div className="flex items-center">
+              <Clock className="w-4 h-4 mr-1" />
+              {booking.time} - {booking.endTime}
+            </div>
+          </div>
+          {!isPast && booking.meet_link && booking.status !== 'cancelled' && (
+            <a
+              href={booking.meet_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center text-blue-600 hover:text-blue-800 text-sm"
+            >
+              <LinkIcon className="w-4 h-4 mr-1" />
+              Join Meeting
+            </a>
           )}
-          <span className="text-lg font-semibold">
-            {booking.type === 'paid' ? `$${booking.cost}` : 'Free'}
-          </span>
+          {!isPast && !canCancel(booking) && booking.status !== 'cancelled' && (
+            <div className="flex items-center text-amber-600 text-sm mt-2">
+              <AlertTriangle className="w-4 h-4 mr-1" />
+              Cannot cancel within 7 days of session
+            </div>
+          )}
+          {isPast && (
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setShowComments(!showComments)}
+              >
+                <MessageCircle className="h-4 w-4" />
+                {showComments ? 'Hide Comments' : 'Show Comments'}
+              </Button>
+
+              {showComments && (
+                <div className="mt-4 space-y-4">
+                  {!userComment && (
+                    <div className="space-y-2">
+                      <Textarea
+                        placeholder="Add your comment..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        className="min-h-[80px]"
+                      />
+                      <Button
+                        onClick={handleAddComment}
+                        disabled={!newComment.trim() || isAddingComment}
+                        className="w-full"
+                      >
+                        {isAddingComment ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                            Adding...
+                          </>
+                        ) : (
+                          'Add Comment'
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {isLoadingComments ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500">
+                      No comments yet
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {comments.map((comment) => (
+                        <div key={comment.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50">
+                          {comment.user_picture && (
+                            <img
+                              src={comment.user_picture}
+                              alt={comment.user_name}
+                              className="w-8 h-8 rounded-full"
+                            />
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{comment.user_name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {comment.user_role}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {format(new Date(comment.created_at), 'MMM d, yyyy h:mm a')}
+                              </span>
+                            </div>
+                            {editingCommentId === comment.id ? (
+                              <div className="mt-2 space-y-2">
+                                <Textarea
+                                  value={editedComment}
+                                  onChange={(e) => setEditedComment(e.target.value)}
+                                  className="min-h-[80px]"
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleEditComment(comment.id)}
+                                    disabled={!editedComment.trim() || isEditingComment}
+                                  >
+                                    {isEditingComment ? (
+                                      <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      'Save'
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={cancelEditing}
+                                    disabled={isEditingComment}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="mt-1 text-gray-700">{comment.comment}</p>
+                                {user && (comment.user_id === user.id || user.role === 'admin') && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-2 h-8 text-gray-500 hover:text-gray-700"
+                                    onClick={() => startEditing(comment)}
+                                  >
+                                    Edit
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex items-center space-x-4 text-sm text-gray-600">
-          <div className="flex items-center">
-            <Calendar className="w-4 h-4 mr-1" />
-            {format(new Date(booking.date), 'MMM d, yyyy')}
-          </div>
-          <div className="flex items-center">
-            <Clock className="w-4 h-4 mr-1" />
-            {booking.time} - {booking.endTime}
-          </div>
-        </div>
-        {!isPast && booking.meet_link && booking.status !== 'cancelled' && (
-          <a
-            href={booking.meet_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center text-blue-600 hover:text-blue-800 text-sm"
-          >
-            <LinkIcon className="w-4 h-4 mr-1" />
-            Join Meeting
-          </a>
-        )}
-        {!isPast && !canCancel(booking) && booking.status !== 'cancelled' && (
-          <div className="flex items-center text-amber-600 text-sm mt-2">
-            <AlertTriangle className="w-4 h-4 mr-1" />
-            Cannot cancel within 7 days of session
-          </div>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   if (isLoading) {
     return (
@@ -349,12 +578,15 @@ const BookingsList = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Session</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-4">
-              <p>Are you sure you want to cancel this session? {selectedBooking?.type === 'paid' && 'The cost will be refunded to your wallet.'}</p>
+            <AlertDialogDescription>
+              {selectedBooking?.type === 'paid' 
+                ? 'Are you sure you want to cancel this session? The cost will be refunded to your wallet.'
+                : 'Are you sure you want to cancel this session?'
+              }
               <div className="mt-4">
-                <p className="text-sm text-muted-foreground mb-2">
+                <div className="text-sm text-muted-foreground mb-2">
                   Type "cancel session" to confirm cancellation
-                </p>
+                </div>
                 <Input
                   value={cancelConfirmText}
                   onChange={(e) => setCancelConfirmText(e.target.value)}

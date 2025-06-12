@@ -361,4 +361,207 @@ router.post('/:id/cancel', authenticateJWT, async (req, res) => {
   }
 });
 
+// GET /api/bookings/:id/comments
+router.get('/:id/comments', authenticateJWT, async (req, res) => {
+  const bookingId = req.params.id;
+
+  try {
+    // Get the booking first to check if it exists and if it's expired
+    const booking = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Check if the booking is expired (in the past)
+    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
+    const currentDate = new Date();
+    
+    if (bookingDate > currentDate) {
+      return res.status(403).json({ error: 'Cannot view comments for future bookings' });
+    }
+
+    // Get comments with user information
+    const comments = await new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          bc.*,
+          u.name as user_name,
+          u.picture as user_picture,
+          u.role as user_role
+        FROM booking_comments bc
+        JOIN users u ON bc.user_id = u.id
+        WHERE bc.booking_id = ?
+        ORDER BY bc.created_at DESC
+      `, [bookingId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+
+    res.json({ comments });
+  } catch (error) {
+    console.error('Failed to get booking comments:', error);
+    res.status(500).json({ error: 'Failed to get booking comments' });
+  }
+});
+
+// POST /api/bookings/:id/comments
+router.post('/:id/comments', authenticateJWT, async (req, res) => {
+  const bookingId = req.params.id;
+  const { comment } = req.body;
+
+  if (!comment) {
+    return res.status(400).json({ error: 'Comment is required' });
+  }
+
+  try {
+    // Get the booking first to check if it exists and if it's expired
+    const booking = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Check if the booking is expired (in the past)
+    const bookingDate = new Date(`${booking.date}T${booking.time.replace(/\s*([AP]M)/, '')}:00`);
+    const currentDate = new Date();
+    
+    if (bookingDate > currentDate) {
+      return res.status(403).json({ error: 'Cannot comment on future bookings' });
+    }
+
+    // Check if user is authorized to comment (must be the booking user or an admin)
+    if (booking.email !== req.user.email && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized to comment on this booking' });
+    }
+
+    // Check if user has already commented (only one comment per user)
+    const existingComment = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM booking_comments WHERE booking_id = ? AND user_id = ?', 
+        [bookingId, req.user.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+    });
+
+    if (existingComment) {
+      return res.status(400).json({ error: 'You have already commented on this booking' });
+    }
+
+    // Add the comment
+    const createdAt = new Date().toISOString();
+    const result = await new Promise((resolve, reject) => {
+      db.run(
+        'INSERT INTO booking_comments (booking_id, user_id, comment, created_at) VALUES (?, ?, ?, ?)',
+        [bookingId, req.user.id, comment, createdAt],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        }
+      );
+    });
+
+    // Get the created comment with user information
+    const createdComment = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT 
+          bc.*,
+          u.name as user_name,
+          u.picture as user_picture,
+          u.role as user_role
+        FROM booking_comments bc
+        JOIN users u ON bc.user_id = u.id
+        WHERE bc.id = ?
+      `, [result], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    res.status(201).json({ message: 'Comment added successfully', comment: createdComment });
+  } catch (error) {
+    console.error('Failed to add booking comment:', error);
+    res.status(500).json({ error: 'Failed to add booking comment' });
+  }
+});
+
+// PATCH /api/bookings/:id/comments/:commentId
+router.patch('/:id/comments/:commentId', authenticateJWT, async (req, res) => {
+  const { id: bookingId, commentId } = req.params;
+  const { comment } = req.body;
+
+  if (!comment) {
+    return res.status(400).json({ error: 'Comment is required' });
+  }
+
+  try {
+    // Get the comment to check ownership
+    const existingComment = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT bc.*, u.role as user_role 
+        FROM booking_comments bc
+        JOIN users u ON bc.user_id = u.id
+        WHERE bc.id = ? AND bc.booking_id = ?
+      `, [commentId, bookingId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!existingComment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    // Check if user owns the comment or is admin
+    if (existingComment.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized to edit this comment' });
+    }
+
+    // Update the comment
+    await new Promise((resolve, reject) => {
+      db.run(
+        'UPDATE booking_comments SET comment = ? WHERE id = ?',
+        [comment, commentId],
+        function(err) {
+          if (err) reject(err);
+          else resolve(this.changes);
+        }
+      );
+    });
+
+    // Get the updated comment with user information
+    const updatedComment = await new Promise((resolve, reject) => {
+      db.get(`
+        SELECT 
+          bc.*,
+          u.name as user_name,
+          u.picture as user_picture,
+          u.role as user_role
+        FROM booking_comments bc
+        JOIN users u ON bc.user_id = u.id
+        WHERE bc.id = ?
+      `, [commentId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    res.json({ message: 'Comment updated successfully', comment: updatedComment });
+  } catch (error) {
+    console.error('Failed to update comment:', error);
+    res.status(500).json({ error: 'Failed to update comment' });
+  }
+});
+
 module.exports = router;

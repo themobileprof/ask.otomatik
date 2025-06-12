@@ -114,6 +114,31 @@ interface WalletUpdateResponse {
   wallet: Wallet;
 }
 
+export interface BookingComment {
+  id: number;
+  booking_id: number;
+  user_id: number;
+  comment: string;
+  created_at: string;
+  user_name: string;
+  user_picture: string;
+  user_role: string;
+}
+
+export interface GetCommentsResponse {
+  comments: BookingComment[];
+}
+
+export interface AddCommentResponse {
+  message: string;
+  comment: BookingComment;
+}
+
+export interface UpdateCommentResponse {
+  message: string;
+  comment: BookingComment;
+}
+
 // API Client
 class ApiClient {
   private client: AxiosInstance;
@@ -328,6 +353,24 @@ class ApiClient {
     payment_type?: 'wallet' | 'flutterwave';
   }) {
     const response = await this.post('/api/payment/flutterwave/verify', data);
+    return response.data;
+  }
+
+  async getBookingComments(bookingId: number): Promise<GetCommentsResponse> {
+    const response = await this.get<GetCommentsResponse>(`/api/bookings/${bookingId}/comments`);
+    return response.data;
+  }
+
+  async addBookingComment(bookingId: number, comment: string): Promise<AddCommentResponse> {
+    const response = await this.post<AddCommentResponse>(`/api/bookings/${bookingId}/comments`, { comment });
+    return response.data;
+  }
+
+  async editBookingComment(bookingId: number, commentId: number, comment: string): Promise<UpdateCommentResponse> {
+    const response = await this.patch<UpdateCommentResponse>(
+      `/api/bookings/${bookingId}/comments/${commentId}`,
+      { comment }
+    );
     return response.data;
   }
 }

@@ -283,17 +283,17 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upcoming Bookings</CardTitle>
-          <CardDescription>
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Bookings</CardTitle>
+            <CardDescription>
             Scheduled future consultations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
           <BookingsTable bookings={activeBookings} />
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
     </div>
   );
 };
