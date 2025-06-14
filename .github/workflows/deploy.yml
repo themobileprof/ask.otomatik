@@ -1,0 +1,76 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  IMAGE_TAG: latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create frontend .env for build
+        run: |
+          echo "${{ secrets.FE_ENV }}" > frontend/.env
+
+      - name: Build and push images
+        run: |
+          docker compose build
+          docker compose push
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            
+            # Pull latest images
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/otomatik-frontend:latest
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/otomatik-backend:latest
+            
+            # Stop and remove existing containers
+            docker stop otomatik-frontend otomatik-backend || true
+            docker rm otomatik-frontend otomatik-backend || true
+            
+            # Create network if it doesn't exist
+            docker network create app-network || true
+            
+            # Start frontend container
+            docker run -d \
+              --name otomatik-frontend \
+              --network app-network \
+              -p 4000:4000 \
+              ${{ secrets.DOCKERHUB_USERNAME }}/otomatik-frontend:latest
+            
+            # Create and copy backend .env file
+            echo "${{ secrets.BE_ENV }}" > backend.env
+            docker cp backend.env otomatik-backend:/app/.env
+            rm backend.env
+            
+            # Start backend container
+            docker run -d \
+              --name otomatik-backend \
+              --network app-network \
+              -p 4000:4000 \
+              -v ${{ secrets.DEPLOY_PATH }}/backend/bookings.db:/app/bookings.db \
+              ${{ secrets.DOCKERHUB_USERNAME }}/otomatik-backend:latest
+            
+            docker system prune -f 
